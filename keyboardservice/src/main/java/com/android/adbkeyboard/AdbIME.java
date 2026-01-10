@@ -25,8 +25,14 @@ public class AdbIME extends InputMethodService {
 
 	@Override
 	public View onCreateInputView() {
-		View mInputView = getLayoutInflater().inflate(R.layout.view, null);
+		// Return null to hide the input view completely
+		return null;
+	}
 
+	@Override
+	public void onStartInputView(android.view.inputmethod.EditorInfo info, boolean restarting) {
+		super.onStartInputView(info, restarting);
+		// Register BroadcastReceiver when input view starts
 		if (mReceiver == null) {
 			IntentFilter filter = new IntentFilter(IME_MESSAGE);
 			filter.addAction(IME_CHARS);
@@ -38,8 +44,6 @@ public class AdbIME extends InputMethodService {
 			mReceiver = new AdbReceiver();
 			registerReceiver(mReceiver, filter);
 		}
-
-		return mInputView;
 	}
 
 	public void onDestroy() {
