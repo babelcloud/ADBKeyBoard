@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <SwitchPreference
+        android:key="show_input_view"
+        android:title="@string/settings_show_input_view_title"
+        android:summary="@string/settings_show_input_view_summary"
+        android:defaultValue="false" />
+</PreferenceScreen>

@@ -4,9 +4,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.inputmethodservice.InputMethodService;
+import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.util.Base64;
-import android.util.Log;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.View;
@@ -21,17 +23,56 @@ public class AdbIME extends InputMethodService {
 	private String IME_EDITORCODE = "ADB_EDITOR_CODE";
 	private String IME_MESSAGE_B64 = "ADB_INPUT_B64";
 	private String IME_CLEAR_TEXT = "ADB_CLEAR_TEXT";
+	private String IME_SETTINGS = "ADB_SETTINGS";
+	private static final String GLOBAL_SETTING_SHOW_INPUT_VIEW = "adbkeyboard_show_input_view";
 	private BroadcastReceiver mReceiver = null;
+	private View mInputView = null;
+
+	private boolean shouldShowInputView() {
+		// Check both Global Settings and SharedPreferences
+		// Priority: Global Settings (if set) > SharedPreferences > default (false)
+		boolean fromGlobal = false;
+		boolean fromPrefs = false;
+		
+		// First check Global Settings
+		try {
+			int value = Settings.Global.getInt(getContentResolver(), GLOBAL_SETTING_SHOW_INPUT_VIEW, -1);
+			if (value != -1) {
+				fromGlobal = (value == 1);
+				return fromGlobal;
+			}
+		} catch (Exception e) {
+			// Ignore, will fallback to SharedPreferences
+		}
+		
+		// Fallback to SharedPreferences if Global Settings not set
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		fromPrefs = prefs.getBoolean("show_input_view", false);
+		return fromPrefs;
+	}
 
 	@Override
 	public View onCreateInputView() {
-		// Return null to hide the input view completely
-		return null;
+		// Always create the view, but we'll control its visibility in onStartInputView()
+		if (mInputView == null) {
+			mInputView = getLayoutInflater().inflate(R.layout.view, null);
+		}
+		return mInputView;
 	}
 
 	@Override
 	public void onStartInputView(android.view.inputmethod.EditorInfo info, boolean restarting) {
 		super.onStartInputView(info, restarting);
+		
+		// Update input view visibility based on current setting
+		// This ensures the view is updated when settings change
+		boolean showInputView = shouldShowInputView();
+		
+		if (mInputView != null) {
+			// Control visibility based on setting
+			mInputView.setVisibility(showInputView ? View.VISIBLE : View.GONE);
+		}
+		
 		// Register BroadcastReceiver when input view starts
 		if (mReceiver == null) {
 			IntentFilter filter = new IntentFilter(IME_MESSAGE);
@@ -41,6 +82,7 @@ public class AdbIME extends InputMethodService {
 			filter.addAction(IME_EDITORCODE);
 			filter.addAction(IME_MESSAGE_B64);
 			filter.addAction(IME_CLEAR_TEXT);
+			filter.addAction(IME_SETTINGS);
 			mReceiver = new AdbReceiver();
 			registerReceiver(mReceiver, filter);
 		}
@@ -162,6 +204,22 @@ public class AdbIME extends InputMethodService {
 					CharSequence beforePos = ic.getTextBeforeCursor(curPos.length(), 0);
 					CharSequence afterPos = ic.getTextAfterCursor(curPos.length(), 0);
 					ic.deleteSurroundingText(beforePos.length(), afterPos.length());
+				}
+			}
+
+			if (intent.getAction().equals(IME_SETTINGS)) {
+				// Handle settings via ADB broadcast (deprecated, use adb shell settings set global instead)
+				String setting = intent.getStringExtra("setting");
+				if (setting != null && setting.equals("show_input_view")) {
+					boolean value = intent.getBooleanExtra("value", false);
+					try {
+						// Try to write to Global Settings (requires system permission)
+						Settings.Global.putInt(context.getContentResolver(), GLOBAL_SETTING_SHOW_INPUT_VIEW, value ? 1 : 0);
+					} catch (SecurityException e) {
+						// Fallback to SharedPreferences if no permission
+						SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+						prefs.edit().putBoolean("show_input_view", value).apply();
+					}
 				}
 			}
 		}
